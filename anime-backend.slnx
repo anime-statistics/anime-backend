@@ -1,6 +1,9 @@
 <Solution>
+  <Folder Name="/Anime.Backend/">
+    <Project Path="Anime.Database/Anime.Database.csproj" />
+    <Project Path="Anime.Server/Anime.Server.csproj" />
+  </Folder>
   <Folder Name="/Solution Items/">
     <File Path="compose.yaml" />
   </Folder>
-  <Project Path="Anime.Server/Anime.Server.csproj" />
 </Solution>

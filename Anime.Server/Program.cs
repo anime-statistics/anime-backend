@@ -1,4 +1,6 @@
 
+using Anime.Database;
+
 {
 	var builder = WebApplication.CreateBuilder(args);
 	ServerSetup(builder);
@@ -12,6 +14,8 @@ return;
 // Настройка Сервера
 void ServerSetup(WebApplicationBuilder builder)
 {
+	builder.Services.AddDatabaseServices(builder.Configuration);
+
 	builder.Services.AddControllers();
 }
 
