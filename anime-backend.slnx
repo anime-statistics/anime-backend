@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/Anime.Backend/">
     <Project Path="Anime.Database/Anime.Database.csproj" />
+    <Project Path="Anime.Logging/Anime.Logging.csproj" />
     <Project Path="Anime.Server/Anime.Server.csproj" />
   </Folder>
   <Folder Name="/Solution Items/">
