@@ -1,0 +1,7 @@
+﻿services:
+  anime.server:
+    image: anime.server
+    build:
+      context: .
+      dockerfile: Anime.Server/Dockerfile
+
