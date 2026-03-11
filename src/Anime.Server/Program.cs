@@ -34,6 +34,14 @@ void ServerSetup(WebApplicationBuilder builder)
 // Запуск Сервера
 void ServerLaunch(WebApplication app)
 {
+	if (app.Environment.IsDevelopment())
+	{
+		app.UseDeveloperExceptionPage();
+	}
+
+	app.UseRouting();
+	app.UseStaticFiles();
+	app.UseDefaultFiles();
 	app.MapControllers();
 
 	app.Run();
