@@ -1,6 +1,7 @@
 
 using Anime.Database;
 using Anime.Logging;
+using Anime.Swagger;
 using Serilog;
 
 try
@@ -29,6 +30,7 @@ void ServerSetup(WebApplicationBuilder builder)
 	builder.Services.AddDatabaseServices(builder.Configuration);
 
 	builder.Services.AddControllers();
+	builder.Services.AddSwaggerServices();
 }
 
 // Запуск Сервера
@@ -40,8 +42,12 @@ void ServerLaunch(WebApplication app)
 	}
 
 	app.UseRouting();
+	app.UseSerilogRequestLogging();
+
 	app.UseStaticFiles();
 	app.UseDefaultFiles();
+
+	app.UseSwaggerServices();
 	app.MapControllers();
 
 	app.Run();
