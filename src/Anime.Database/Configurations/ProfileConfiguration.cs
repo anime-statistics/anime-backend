@@ -1,4 +1,5 @@
 ﻿using Anime.Database.Configurations.Templates;
+using Anime.Database.Data;
 using Anime.Database.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -12,8 +13,14 @@ public class ProfileConfiguration : BaseEntityConfiguration<ProfileEntity>
 		base.Configure(builder);
 		builder.ToTable("Profiles");
 
-		builder.Property(profile => profile.Name)
+		builder.Property(profile => profile.NickName)
 			.IsRequired()
 			.HasMaxLength(100);
+
+		builder.HasData
+		(
+			ProfileEntityCollection.SystemProfile,
+			ProfileEntityCollection.KotonaiProfile
+		);
 	}
 }

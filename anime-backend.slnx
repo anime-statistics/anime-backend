@@ -5,6 +5,10 @@
     <Project Path="src/Anime.Server/Anime.Server.csproj" />
     <Project Path="src/Anime.Swagger/Anime.Swagger.csproj" />
   </Folder>
+  <Folder Name="/Anime.Tools/" />
+  <Folder Name="/Anime.Tools/Anime.UUID/">
+    <Project Path="src/Anime.UUID.Tool/Anime.UUID.Tool.csproj" />
+  </Folder>
   <Folder Name="/Solution Items/">
     <File Path="compose.yaml" />
   </Folder>

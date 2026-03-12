@@ -1,4 +1,5 @@
 ﻿using Anime.Database.Configurations.Templates;
+using Anime.Database.Data;
 using Anime.Database.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -20,5 +21,12 @@ public class TagConfiguration : BaseEntityConfiguration<TagEntity>
 		builder.Property(tag => tag.Name)
 			.IsRequired()
 			.HasMaxLength(100);
+
+		builder.HasData
+		(
+			TagEntityCollection.Tag1,
+			TagEntityCollection.Tag2,
+			TagEntityCollection.Tag3
+		);
 	}
 }

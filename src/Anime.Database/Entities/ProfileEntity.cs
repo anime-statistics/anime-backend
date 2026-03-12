@@ -4,7 +4,7 @@ namespace Anime.Database.Entities;
 
 public record ProfileEntity : EntityBase
 {
-	public required string Name { get; init; }
+	public required string NickName { get; init; }
 
-	public required List<AnimeEntity> Animes { get; init; }
+	public List<AnimeEntity> Animes { get; init; } = [];
 }

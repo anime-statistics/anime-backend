@@ -1,4 +1,5 @@
 ﻿using Anime.Database.Configurations.Templates;
+using Anime.Database.Data;
 using Anime.Database.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -20,5 +21,11 @@ public class AnimeConfiguration : BaseEntityConfiguration<AnimeEntity>
 		builder.Property(anime => anime.Title)
 			.IsRequired()
 			.HasMaxLength(255);
+
+		builder.HasData
+		(
+			AnimeEntityCollection.Anime1,
+			AnimeEntityCollection.Anime2
+		);
 	}
 }

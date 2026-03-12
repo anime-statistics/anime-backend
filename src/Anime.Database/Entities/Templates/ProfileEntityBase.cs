@@ -3,5 +3,5 @@
 public abstract record ProfileEntityBase : EntityBase
 {
 	public required Guid ProfileId { get; init; }
-	public required ProfileEntity Profile { get; init; }
+	public ProfileEntity? Profile { get; init; }
 }

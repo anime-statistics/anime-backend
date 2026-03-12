@@ -6,6 +6,6 @@ public record AnimeEntity : ProfileEntityBase
 {
 	public required string Title { get; init; }
 
-	public required List<TagEntity> Tags { get; init; }
-	public required List<FileEntity> Files { get; init; }
+	public List<TagEntity> Tags { get; init; } = [];
+	public List<FileEntity> Files { get; init; } = [];
 }

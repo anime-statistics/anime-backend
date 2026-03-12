@@ -6,9 +6,9 @@ public abstract record EntityBase
 
 	// ===== ===== ===== ===== =====
 
-	public required DateTime CreatedAt { get; init; } = DateTime.UtcNow;
+	public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
 	public required Guid CreatorId { get; init; }
-	public required ProfileEntity Creator { get; init; }
+	public ProfileEntity? Creator { get; init; }
 
 	// ===== ===== ===== ===== =====
 

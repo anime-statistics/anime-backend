@@ -17,6 +17,16 @@ public class AnimeDbContext(DbContextOptions<AnimeDbContext> options)
 		modelBuilder.Ignore<AnimeEntityBase>();
 	}
 
+	protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+	{
+		base.OnConfiguring(optionsBuilder);
+
+		if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
+		{
+			optionsBuilder.EnableSensitiveDataLogging();
+		}
+	}
+
 	public DbSet<ProfileEntity> Profiles => Set<ProfileEntity>();
 	public DbSet<AnimeEntity> Animes => Set<AnimeEntity>();
 	public DbSet<TagEntity> Tags => Set<TagEntity>();
