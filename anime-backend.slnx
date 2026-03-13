@@ -2,6 +2,7 @@
   <Folder Name="/Anime.Backend/">
     <Project Path="src/Anime.Database/Anime.Database.csproj" />
     <Project Path="src/Anime.Logging/Anime.Logging.csproj" />
+    <Project Path="src/Anime.Mappers/Anime.Mappers.csproj" />
     <Project Path="src/Anime.Server/Anime.Server.csproj" />
     <Project Path="src/Anime.Swagger/Anime.Swagger.csproj" />
   </Folder>

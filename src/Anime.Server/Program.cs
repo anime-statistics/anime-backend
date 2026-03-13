@@ -1,6 +1,7 @@
 
 using Anime.Database;
 using Anime.Logging;
+using Anime.Mappers;
 using Anime.Swagger;
 using Serilog;
 
@@ -28,6 +29,7 @@ void ServerSetup(WebApplicationBuilder builder)
 {
 	builder.Services.AddLoggingServices(builder.Configuration);
 	builder.Services.AddDatabaseServices(builder.Configuration);
+	builder.Services.AddMapperServices();
 
 	builder.Services.AddControllers();
 	builder.Services.AddSwaggerServices();

@@ -14,8 +14,8 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\Anime.Database\Anime.Database.csproj" />
       <ProjectReference Include="..\Anime.Logging\Anime.Logging.csproj" />
+      <ProjectReference Include="..\Anime.Mappers\Anime.Mappers.csproj" />
       <ProjectReference Include="..\Anime.Swagger\Anime.Swagger.csproj" />
     </ItemGroup>
 

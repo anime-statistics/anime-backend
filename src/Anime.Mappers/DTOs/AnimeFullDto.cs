@@ -1,28 +1,26 @@
-﻿using Anime.Database.Entities;
+﻿namespace Anime.Mappers.DTOs;
 
-namespace Anime.Server.DTOs.Anime;
-
-public record AnimeDto
+public record AnimeFullDto
 {
 	public required Guid Id { get; init; }
 
-	public DateTime CreatedAt { get; init; }
+	public required DateTime CreatedAt { get; init; }
 	public required Guid CreatorId { get; init; }
-	public ProfileEntity? Creator { get; init; }
+	public required ProfileMiniDto Creator { get; init; }
 
 	public DateTime? ModifiedAt { get; init; }
 	public Guid? ModifierId { get; init; }
-	public ProfileEntity? Modifier { get; init; }
+	public ProfileMiniDto? Modifier { get; init; }
 
 	// ===== ===== ===== ===== =====
 
 	public required Guid ProfileId { get; init; }
-	public ProfileEntity? Profile { get; init; }
+	public required ProfileMiniDto Profile { get; init; }
 
 	// ===== ===== ===== ===== =====
 
 	public required string Title { get; init; }
 
-	public required IReadOnlyList<TagEntity> Tags { get; init; }
+	public required IReadOnlyList<TagMiniDto> Tags { get; init; }
 	public required int TotalFiles { get; init; }
 }
