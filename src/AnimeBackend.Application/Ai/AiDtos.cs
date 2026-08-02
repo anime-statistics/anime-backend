@@ -11,6 +11,7 @@ public sealed record AiContextDto(IReadOnlyList<string>? WatchedTitles, IReadOnl
 public sealed record AiChatApiRequest(
     IReadOnlyList<AiChatApiMessage>? Messages,
     string? Model,
+    double? Temperature,
     bool? DeepThink,
     AiContextDto? Context);
 
@@ -20,6 +21,7 @@ public sealed record AiParaphraseApiRequest(
     string? Text,
     string? Style,
     string? Model,
+    double? Temperature,
     bool? DeepThink);
 
 public sealed record AiParaphraseResponseDto(string Result, AiUsageDto Usage);
@@ -28,6 +30,7 @@ public sealed record AiRecommendationsApiRequest(
     string? Prompt,
     string? Mood,
     string? Model,
+    double? Temperature,
     bool? DeepThink,
     AiContextDto? Context);
 

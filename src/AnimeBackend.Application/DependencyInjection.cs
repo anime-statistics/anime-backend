@@ -22,6 +22,9 @@ public static class DependencyInjection
         services.AddScoped<TagsHandler>();
         services.AddScoped<NotesHandler>();
         services.AddScoped<Ai.AiHandlers>();
+        services.AddScoped<Ai.AiConversation>();
+        services.AddScoped<Ai.AiToolbox>();
+        services.AddScoped<Ai.AiModelCatalog>();
         services.AddScoped<AttachmentsHandler>();
         services.AddScoped<Materializer>();
         services.AddScoped<DomainEventDispatcher>();

@@ -1,3 +1,4 @@
+using AnimeBackend.Domain.Ai;
 using AnimeBackend.Domain.Media;
 using AnimeBackend.Domain.Notes;
 using AnimeBackend.Domain.Tags;
@@ -10,5 +11,6 @@ public interface IAppDb
     DbSet<MediaItem> MediaItems { get; }
     DbSet<Tag> Tags { get; }
     DbSet<Note> Notes { get; }
+    DbSet<AiModelUsage> AiModelUsages { get; }
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }

@@ -15,6 +15,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<MediaItem> MediaItems => Set<MediaItem>();
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<Note> Notes => Set<Note>();
+    public DbSet<Domain.Ai.AiModelUsage> AiModelUsages => Set<Domain.Ai.AiModelUsage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -66,6 +67,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             note.Property(n => n.Id).ValueGeneratedNever();
             note.Property(n => n.MediaId).HasMaxLength(300);
             note.HasIndex(n => n.MediaId);
+        });
+
+        modelBuilder.Entity<Domain.Ai.AiModelUsage>(usage =>
+        {
+            usage.HasKey(u => u.ModelId);
+            usage.Property(u => u.ModelId).ValueGeneratedNever().HasMaxLength(200);
         });
     }
 

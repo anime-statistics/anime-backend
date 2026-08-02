@@ -4,23 +4,26 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace AnimeBackend.Api.Controllers;
 
-// The /ai group, backed by the Anthropic API. Without a configured key the
-// models list is honestly empty and every action answers 404 with a readable
-// message (5xx would trigger the frontend's triple retry).
+// The /ai group, backed by RouterAI. Without a configured key the models list
+// is honestly empty and every action answers 404 with a readable message (5xx
+// would trigger the frontend's triple retry).
 [ApiController]
 [Route("api/v1/ai")]
-public sealed class AiController(AiHandlers handlers, IAiChat ai) : ControllerBase
+public sealed class AiController(AiHandlers handlers) : ControllerBase
 {
+    // Default view leads with the models this user actually uses. `query`
+    // searches the router's full catalogue, `all=true` returns it unfiltered.
     [HttpGet("models")]
-    public IActionResult Models()
-        => Ok(new { Items = ai.IsConfigured ? AiModelCatalog.Models : [] });
+    public async Task<IActionResult> Models(
+        [FromQuery] string? query, [FromQuery] bool all, CancellationToken ct)
+        => Ok(new { Items = await handlers.ModelsAsync(query, all, ct) });
 
     [HttpPost("chat")]
     public async Task<AiChatResponseDto> Chat([FromBody] AiChatApiRequest request, CancellationToken ct)
         => await handlers.ChatAsync(request, ct);
 
     // Plain text chunks, exactly what the frontend's fetch-reader expects —
-    // not SSE. Model deltas are flushed as they arrive.
+    // not SSE. Deltas are flushed as they arrive, across tool-calling rounds.
     [HttpPost("chat/stream")]
     public async Task ChatStream([FromBody] AiChatApiRequest request, CancellationToken ct)
     {

@@ -1,57 +1,67 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
-using AnimeBackend.Application.Abstractions;
 using AnimeBackend.Domain;
-using AnimeBackend.Domain.Media;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace AnimeBackend.Application.Ai;
 
 // The /ai group. Prompts are Russian because the catalogue, notes and UI are;
-// replies come back in the user's language either way. Temperature from the
-// frontend is deliberately ignored — current Claude models reject sampling
-// parameters — and `deep_think` maps to the effort level instead.
+// replies follow the user's language regardless. The assistant is given tools
+// rather than a dump of the collection — see AiToolbox for why.
 public sealed class AiHandlers(
     IAiChat ai,
-    IAppDb db,
-    IEnumerable<ISourceClient> sources,
+    AiConversation conversation,
+    AiModelCatalog catalog,
     ILogger<AiHandlers> logger)
 {
-    private const string RefusedReply =
-        "Запрос отклонён системой безопасности модели. Попробуйте переформулировать.";
+    private const string ChatSystemPrompt =
+        "Ты ассистент персонального трекера аниме и манги. Отвечай на языке пользователя, "
+        + "кратко и по делу, в Markdown.\n"
+        + "У тебя есть инструменты для работы с коллекцией пользователя — пользуйся ими, "
+        + "а не догадками: library_stats для общей картины, search_library для поиска по "
+        + "коллекции, get_media_details для подробностей о конкретной работе, list_tags "
+        + "для тегов, search_catalog для того, чего у пользователя ещё нет.\n"
+        + "Про коллекцию пользователя говори только то, что вернули инструменты. Не выдумывай "
+        + "названия, оценки и прогресс: если в результатах инструментов чего-то нет — значит, "
+        + "этого нет и у пользователя. Рекомендуя незнакомое, сначала проверь его через "
+        + "search_catalog. Спойлеры — только если пользователь прямо о них просит.";
 
-    public static void EnsureConfigured(IAiChat ai)
+    public Task<IReadOnlyList<AiModelDto>> ModelsAsync(string? query, bool all, CancellationToken ct)
+        => catalog.ListAsync(query, all, ct);
+
+    public void EnsureConfigured()
     {
         if (!ai.IsConfigured)
         {
             throw new NotFoundException(
-                "AI-ассистент не подключён: задайте ключ Anthropic API " +
-                "(переменная окружения ANTHROPIC_API_KEY) и перезапустите бэкенд");
+                "AI-ассистент не подключён: задайте ключ RouterAI "
+                + "(переменная окружения ROUTERAI_API_KEY или секрет Ai:ApiKey) "
+                + "и перезапустите бэкенд");
         }
     }
 
     public async Task<AiChatResponseDto> ChatAsync(AiChatApiRequest request, CancellationToken ct)
     {
-        EnsureConfigured(ai);
-        var completion = await ai.CompleteAsync(BuildChatRequest(request), ct);
-        var reply = completion.Refused ? RefusedReply : completion.Text;
-        return new AiChatResponseDto(reply, new AiUsageDto(completion.InputTokens, completion.OutputTokens));
+        EnsureConfigured();
+        var chatRequest = await BuildChatRequestAsync(request, ct);
+        var result = await conversation.RunAsync(chatRequest, ct);
+        return new AiChatResponseDto(result.Text, new AiUsageDto(result.InputTokens, result.OutputTokens));
     }
 
     public async IAsyncEnumerable<string> ChatStreamAsync(
         AiChatApiRequest request, [EnumeratorCancellation] CancellationToken ct)
     {
-        EnsureConfigured(ai);
-        await foreach (var chunk in ai.StreamAsync(BuildChatRequest(request), ct))
+        EnsureConfigured();
+        var chatRequest = await BuildChatRequestAsync(request, ct);
+        await foreach (var chunk in conversation.StreamAsync(chatRequest, ct))
             yield return chunk;
     }
 
     public async Task<AiParaphraseResponseDto> ParaphraseAsync(
         AiParaphraseApiRequest request, CancellationToken ct)
     {
-        EnsureConfigured(ai);
+        EnsureConfigured();
         if (string.IsNullOrWhiteSpace(request.Text))
             throw new DomainException("Нечего перефразировать: текст пуст");
 
@@ -64,171 +74,174 @@ public sealed class AiHandlers(
             _ => "Приведи текст в порядок: исправь пунктуацию и убери шероховатости.",
         };
 
-        var completion = await ai.CompleteAsync(new AiChatRequest
+        var model = await catalog.ResolveAsync(request.Model, ct);
+        var result = await conversation.RunAsync(new AiChatRequest
         {
-            Model = AiModelCatalog.Resolve(request.Model),
-            System = "Ты редактор заметок в трекере аниме. " + styleInstruction +
-                     " Сохрани язык оригинала и Markdown-разметку, если она есть." +
-                     " В ответе верни ТОЛЬКО итоговый текст, без пояснений и кавычек.",
-            Messages = [new AiChatMessage("user", request.Text)],
-            DeepThink = request.DeepThink ?? false,
-            MaxTokens = 2048,
+            Model = model?.Id ?? AiModelCatalog.FallbackModelId,
+            System = "Ты редактор заметок в трекере аниме. " + styleInstruction
+                     + " Сохрани язык оригинала и Markdown-разметку, если она есть."
+                     + " В ответе верни ТОЛЬКО итоговый текст, без пояснений и кавычек.",
+            Messages = [AiChatMessage.User(request.Text)],
+            Temperature = Temperature(model, request.Temperature),
+            MaxTokens = 4000,
         }, ct);
 
-        if (completion.Refused) throw new DomainException(RefusedReply);
         return new AiParaphraseResponseDto(
-            completion.Text.Trim(),
-            new AiUsageDto(completion.InputTokens, completion.OutputTokens));
+            result.Text.Trim(),
+            new AiUsageDto(result.InputTokens, result.OutputTokens));
     }
 
+    // One phase, not two. Each round is a full generation, and a reasoning
+    // model spends 30-90 seconds on each — an explore pass followed by a
+    // separate formatting pass pushed this past any tolerable wait. So the
+    // model explores and emits the JSON in the same conversation, and the
+    // parser tolerates prose or fences around it.
     public async Task<AiRecommendationsResponseDto> RecommendationsAsync(
         AiRecommendationsApiRequest request, CancellationToken ct)
     {
-        EnsureConfigured(ai);
+        EnsureConfigured();
 
-        var library = await LibrarySnapshotAsync(ct);
-        var prompt = new StringBuilder();
-        prompt.AppendLine("Подбери 5 аниме для пользователя.");
-        prompt.AppendLine($"Настроение: {MoodLabel(request.Mood)}.");
+        var model = await catalog.ResolveAsync(request.Model, ct);
+
+        var brief = new StringBuilder();
+        brief.AppendLine("Подбери для пользователя 5 аниме, которых ещё нет в его коллекции.");
+        brief.AppendLine($"Настроение: {MoodLabel(request.Mood)}.");
         if (!string.IsNullOrWhiteSpace(request.Prompt))
-            prompt.AppendLine($"Пожелание пользователя: {request.Prompt}");
-        if (library.Count > 0)
-        {
-            prompt.AppendLine("Коллекция пользователя (не рекомендуй то, что уже есть):");
-            foreach (var line in library) prompt.AppendLine("- " + line);
-        }
+            brief.AppendLine($"Пожелание: {request.Prompt}");
+        brief.AppendLine(
+            "Порядок работы: посмотри вкусы через library_stats или search_library; "
+            + "сам выбери 5 конкретных известных тайтлов, подходящих под запрос; "
+            + "проверь каждый через search_catalog по его точному названию и возьми оттуда "
+            + "media_id. Не ищи по жанру или настроению — только по названиям кандидатов. "
+            + "Последним сообщением верни только JSON.");
 
-        var completion = await ai.CompleteAsync(new AiChatRequest
+        var result = await conversation.RunAsync(new AiChatRequest
         {
-            Model = AiModelCatalog.Resolve(request.Model),
-            System = "Ты рекомендательный движок аниме-трекера. Рекомендуй существующие аниме. " +
-                     "В title пиши оригинальное ромадзи-название (как на MyAnimeList или Shikimori), " +
-                     "в reason — короткое объяснение по-русски, почему это подходит, " +
-                     "в score — уверенность от 0 до 1.",
-            Messages = [new AiChatMessage("user", prompt.ToString())],
-            DeepThink = request.DeepThink ?? false,
-            MaxTokens = 3000,
-            JsonSchema = RecommendationsSchema,
+            Model = model?.Id ?? AiModelCatalog.FallbackModelId,
+            System = "Ты рекомендательный движок аниме-трекера. Опирайся на реальную коллекцию "
+                     + "пользователя и на результаты поиска по каталогу, а не на догадки. "
+                     + "Закончив, верни ТОЛЬКО JSON без пояснений вокруг, например: "
+                     + "{\"items\":[{\"media_id\":\"shikimori_9253-steins-gate\","
+                     + "\"title\":\"Steins;Gate\",\"reason\":\"Медленный старт и сильная "
+                     + "вторая половина — как в отмеченных вами драмах\",\"score\":0.9}]}. "
+                     + "В reason пиши живое объяснение по-русски, привязанное к вкусам "
+                     + "пользователя. media_id бери строго из результатов search_catalog; "
+                     + "тайтл без найденного media_id не включай.",
+            Messages = [AiChatMessage.User(brief.ToString())],
+            Tools = AiToolbox.Definitions,
+            Temperature = Temperature(model, request.Temperature),
+            MaxTokens = 8000,
+            MaxToolRounds = 2,
         }, ct);
 
-        if (completion.Refused) throw new DomainException(RefusedReply);
-
-        var usage = new AiUsageDto(completion.InputTokens, completion.OutputTokens);
-        var items = await ResolveRecommendationsAsync(completion.Text, ct);
-        return new AiRecommendationsResponseDto(items, usage);
+        return new AiRecommendationsResponseDto(
+            ParseRecommendations(result.Text),
+            new AiUsageDto(result.InputTokens, result.OutputTokens));
     }
 
     public async Task<AiProcessVoiceResponseDto> ProcessVoiceAsync(
         AiProcessVoiceApiRequest request, CancellationToken ct)
     {
-        EnsureConfigured(ai);
+        EnsureConfigured();
         if (string.IsNullOrWhiteSpace(request.Text))
             throw new DomainException("Пустой текст распознавания");
 
-        var completion = await ai.CompleteAsync(new AiChatRequest
+        var model = await catalog.ResolveAsync(null, ct);
+        var result = await conversation.RunAsync(new AiChatRequest
         {
-            Model = AiModelCatalog.DefaultModelId,
-            System = "Тебе дают сырой текст голосового ввода из аниме-трекера. " +
-                     "В processed_text верни его причёсанным: убери слова-паразиты и оговорки, " +
-                     "поправь пунктуацию, сохрани язык и смысл. " +
-                     "В suggestions предложи до 5 названий существующих аниме, " +
-                     "которые пользователь мог иметь в виду или которые подходят по теме; " +
-                     "если ничего не подходит — пустой список.",
-            Messages = [new AiChatMessage("user", request.Text)],
-            MaxTokens = 1000,
+            Model = model?.Id ?? AiModelCatalog.FallbackModelId,
+            System = "Тебе дают сырой текст голосового ввода из аниме-трекера. "
+                     + "В processed_text верни его причёсанным: убери слова-паразиты и оговорки, "
+                     + "поправь пунктуацию, сохрани язык и смысл. "
+                     + "В suggestions предложи до 5 названий аниме, которые пользователь мог "
+                     + "иметь в виду; если непонятно — пустой список.",
+            Messages = [AiChatMessage.User(request.Text)],
             JsonSchema = ProcessVoiceSchema,
+            MaxTokens = 4000,
         }, ct);
-
-        if (completion.Refused) return new AiProcessVoiceResponseDto(request.Text.Trim(), []);
 
         try
         {
-            using var parsed = JsonDocument.Parse(completion.Text);
-            var processed = parsed.RootElement.GetProperty("processed_text").GetString() ?? "";
-            var suggestions = parsed.RootElement.GetProperty("suggestions")
-                .EnumerateArray()
-                .Select(s => s.GetString())
-                .Where(s => !string.IsNullOrWhiteSpace(s))
-                .Select(s => s!)
-                .Take(5)
-                .ToList();
-            return new AiProcessVoiceResponseDto(processed, suggestions);
+            using var parsed = JsonDocument.Parse(ExtractJson(result.Text));
+            var processed = parsed.RootElement.TryGetProperty("processed_text", out var text)
+                ? text.GetString() ?? request.Text
+                : request.Text;
+            var suggestions = parsed.RootElement.TryGetProperty("suggestions", out var list)
+                    && list.ValueKind == JsonValueKind.Array
+                ? list.EnumerateArray()
+                    .Select(s => s.GetString())
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Select(s => s!)
+                    .Take(5)
+                    .ToList()
+                : [];
+            return new AiProcessVoiceResponseDto(processed.Trim(), suggestions);
         }
-        catch (Exception ex) when (ex is JsonException or KeyNotFoundException)
+        catch (JsonException ex)
         {
+            // A model that ignored the schema shouldn't break dictation.
             logger.LogWarning(ex, "Некорректный JSON от модели в process-voice");
             return new AiProcessVoiceResponseDto(request.Text.Trim(), []);
         }
     }
 
-    private AiChatRequest BuildChatRequest(AiChatApiRequest request)
+    private async Task<AiChatRequest> BuildChatRequestAsync(
+        AiChatApiRequest request, CancellationToken ct)
     {
         if (request.Messages is not { Count: > 0 })
             throw new DomainException("Пустая история чата");
 
-        var system = new StringBuilder(
-            "Ты ассистент персонального трекера аниме и манги. Отвечай на языке пользователя, " +
-            "кратко и по делу, в Markdown. Ты можешь рекомендовать аниме, объяснять сюжеты без " +
-            "спойлеров (или со спойлерами, если явно просят) и помогать с заметками.");
-
-        if (request.Context?.WatchedTitles is { Count: > 0 } watched)
-            system.Append("\nПросмотрено пользователем: ").Append(string.Join(", ", watched.Take(50)));
-        if (request.Context?.Tags is { Count: > 0 } tags)
-            system.Append("\nТеги пользователя: ").Append(string.Join(", ", tags.Take(30)));
-
         var messages = request.Messages
             .Where(m => m.Role is "user" or "assistant" && !string.IsNullOrWhiteSpace(m.Content))
-            .Select(m => new AiChatMessage(m.Role!, m.Content!))
+            .Select(m => new AiChatMessage { Role = m.Role!, Content = m.Content })
             .ToList();
         if (messages.Count == 0)
             throw new DomainException("Пустая история чата");
 
+        var model = await catalog.ResolveAsync(request.Model, ct);
         var deepThink = request.DeepThink ?? false;
+
         return new AiChatRequest
         {
-            Model = AiModelCatalog.Resolve(request.Model),
-            System = system.ToString(),
+            Model = model?.Id ?? AiModelCatalog.FallbackModelId,
+            System = ChatSystemPrompt,
             Messages = messages,
-            DeepThink = deepThink,
-            // max_tokens caps thinking plus reply on current models, so the
-            // deep-think mode gets extra headroom.
+            Tools = AiToolbox.Definitions,
+            Temperature = Temperature(model, request.Temperature),
+            // Reasoning models spend part of this budget thinking before a
+            // single visible character appears, so it has to be generous.
             MaxTokens = deepThink ? 16000 : 8192,
         };
     }
 
-    // Compact library digest for the recommender: highest-rated first, capped
-    // so the prompt stays small even for large collections.
-    private async Task<List<string>> LibrarySnapshotAsync(CancellationToken ct)
-    {
-        var items = await db.MediaItems
-            .Where(m => m.Tags.Count > 0)
-            .OrderByDescending(m => m.UserScore ?? 0)
-            .ThenByDescending(m => m.UpdatedAt)
-            .Take(40)
-            .Select(m => new { m.Title, m.Genres, m.UserScore })
-            .ToListAsync(ct);
+    // Reasoning models reject sampling parameters; the catalogue tells us which
+    // ones accept temperature, so the UI slider is honoured where it works and
+    // silently dropped where it doesn't.
+    private static double? Temperature(AiModelInfo? model, double? requested)
+        => model?.SupportsTemperature == true && requested is >= 0 and <= 2 ? requested : null;
 
-        return [.. items.Select(m =>
-            m.Title
-            + (m.Genres.Count > 0 ? $" ({string.Join(", ", m.Genres.Take(3))})" : "")
-            + (m.UserScore is not null ? $" — оценка {m.UserScore:0.#}" : ""))];
-    }
-
-    // The model proposes titles; real catalogue ids come from source search so
-    // every recommendation opens as a working card. Unresolvable titles are
-    // dropped rather than shipped with a fake id.
-    private async Task<List<AiRecommendationDto>> ResolveRecommendationsAsync(
-        string json, CancellationToken ct)
+    private List<AiRecommendationDto> ParseRecommendations(string json)
     {
-        List<(string Title, string Reason, double Score)> proposed = [];
+        var results = new List<AiRecommendationDto>();
         try
         {
-            using var parsed = JsonDocument.Parse(json);
-            foreach (var item in parsed.RootElement.GetProperty("items").EnumerateArray())
+            using var parsed = JsonDocument.Parse(ExtractJson(json));
+            if (!parsed.RootElement.TryGetProperty("items", out var items)
+                || items.ValueKind != JsonValueKind.Array)
             {
-                var title = item.GetProperty("title").GetString();
-                if (string.IsNullOrWhiteSpace(title)) continue;
-                proposed.Add((
+                return results;
+            }
+
+            foreach (var item in items.EnumerateArray())
+            {
+                var mediaId = item.TryGetProperty("media_id", out var id) ? id.GetString() : null;
+                var title = item.TryGetProperty("title", out var name) ? name.GetString() : null;
+                // No real catalogue id means the card wouldn't open — drop it
+                // rather than ship an invented one.
+                if (string.IsNullOrWhiteSpace(mediaId) || string.IsNullOrWhiteSpace(title)) continue;
+
+                results.Add(new AiRecommendationDto(
+                    mediaId,
                     title,
                     item.TryGetProperty("reason", out var reason) ? reason.GetString() ?? "" : "",
                     item.TryGetProperty("score", out var score) && score.TryGetDouble(out var value)
@@ -236,54 +249,20 @@ public sealed class AiHandlers(
                         : 0.5));
             }
         }
-        catch (Exception ex) when (ex is JsonException or KeyNotFoundException)
+        catch (JsonException ex)
         {
             logger.LogWarning(ex, "Некорректный JSON от модели в recommendations");
-            return [];
-        }
-
-        var results = new List<AiRecommendationDto>();
-        using var throttle = new SemaphoreSlim(2);
-        var resolved = await Task.WhenAll(proposed.Select(async candidate =>
-        {
-            await throttle.WaitAsync(ct);
-            try
-            {
-                return (candidate, Id: await ResolveMediaIdAsync(candidate.Title, ct));
-            }
-            finally
-            {
-                throttle.Release();
-            }
-        }));
-
-        foreach (var (candidate, id) in resolved)
-        {
-            if (id is null) continue;
-            results.Add(new AiRecommendationDto(id, candidate.Title, candidate.Reason, candidate.Score));
         }
         return results;
     }
 
-    private async Task<string?> ResolveMediaIdAsync(string title, CancellationToken ct)
+    // Some models wrap JSON in prose or a fenced block even when asked not to.
+    private static string ExtractJson(string text)
     {
-        foreach (var source in sources.OrderBy(s => s.Source))
-        {
-            try
-            {
-                var hits = await source.SearchAsync(title, MediaType.Anime, ct);
-                if (hits.Count > 0) return hits[0].Id.ToString();
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Не удалось найти «{Title}» в {Source}", title, source.Source);
-            }
-        }
-        return null;
+        var trimmed = text.Trim();
+        var start = trimmed.IndexOf('{');
+        var end = trimmed.LastIndexOf('}');
+        return start >= 0 && end > start ? trimmed[start..(end + 1)] : trimmed;
     }
 
     private static string MoodLabel(string? mood) => mood switch
@@ -294,29 +273,6 @@ public sealed class AiHandlers(
         "romantic" => "романтическое",
         _ => "любое",
     };
-
-    private const string RecommendationsSchema = """
-        {
-          "type": "object",
-          "properties": {
-            "items": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "title": { "type": "string" },
-                  "reason": { "type": "string" },
-                  "score": { "type": "number" }
-                },
-                "required": ["title", "reason", "score"],
-                "additionalProperties": false
-              }
-            }
-          },
-          "required": ["items"],
-          "additionalProperties": false
-        }
-        """;
 
     private const string ProcessVoiceSchema = """
         {

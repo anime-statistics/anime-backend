@@ -25,9 +25,7 @@ public static class DependencyInjection
         services.Configure<ShikimoriOptions>(configuration.GetSection(ShikimoriOptions.Section));
         services.Configure<AniLibertyOptions>(configuration.GetSection(AniLibertyOptions.Section));
         services.Configure<StorageOptions>(configuration.GetSection(StorageOptions.Section));
-        services.Configure<Ai.AiOptions>(configuration.GetSection(Ai.AiOptions.Section));
-
-        services.AddSingleton<Application.Ai.IAiChat, Ai.AnthropicAiChat>();
+        services.Configure<Ai.RouterAiOptions>(configuration.GetSection(Ai.RouterAiOptions.Section));
 
         services.AddHybridCache();
 
@@ -62,6 +60,16 @@ public static class DependencyInjection
 
         services.AddTransient<ISourceClient>(sp => sp.GetRequiredService<ShikimoriClient>());
         services.AddTransient<ISourceClient>(sp => sp.GetRequiredService<AniLibertyClient>());
+
+        // A tool-calling turn plus model latency can run well past a normal API
+        // call, so this client gets a long timeout and no retries — replaying a
+        // half-finished agent turn would double-charge and confuse the loop.
+        services.AddHttpClient<Application.Ai.IAiChat, Ai.RouterAiChat>((sp, client) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<Ai.RouterAiOptions>>().Value;
+            client.BaseAddress = new Uri(opts.BaseUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromMinutes(5);
+        });
 
         services.AddSingleton<IFileStorage, LocalFileStorage>();
 
