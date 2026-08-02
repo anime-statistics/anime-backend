@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AnimeBackend.Api/AnimeBackend.Api.csproj" />
+    <Project Path="src/AnimeBackend.Application/AnimeBackend.Application.csproj" />
+    <Project Path="src/AnimeBackend.Domain/AnimeBackend.Domain.csproj" />
+    <Project Path="src/AnimeBackend.Infrastructure/AnimeBackend.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AnimeBackend.Api.Tests/AnimeBackend.Api.Tests.csproj" />
+    <Project Path="tests/AnimeBackend.Application.Tests/AnimeBackend.Application.Tests.csproj" />
+  </Folder>
+</Solution>

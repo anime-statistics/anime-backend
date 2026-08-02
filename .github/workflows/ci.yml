@@ -1,0 +1,42 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test --no-build --configuration Release --logger "console;verbosity=minimal"
+
+      # The OpenAPI document is the wire contract; publishing it per commit
+      # makes frontend/backend drift visible without running anything locally.
+      - name: Export OpenAPI document
+        run: |
+          dotnet run --project src/AnimeBackend.Api --no-build --configuration Release &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:5000/swagger/v1/swagger.json -o openapi.json && break
+            sleep 1
+          done
+          test -s openapi.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openapi
+          path: openapi.json

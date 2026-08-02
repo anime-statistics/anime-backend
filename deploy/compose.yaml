@@ -1,0 +1,10 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "5000:8080"
+    volumes:
+      - ../data:/app/data
+    restart: unless-stopped
