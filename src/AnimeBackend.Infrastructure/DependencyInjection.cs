@@ -25,6 +25,9 @@ public static class DependencyInjection
         services.Configure<ShikimoriOptions>(configuration.GetSection(ShikimoriOptions.Section));
         services.Configure<AniLibertyOptions>(configuration.GetSection(AniLibertyOptions.Section));
         services.Configure<StorageOptions>(configuration.GetSection(StorageOptions.Section));
+        services.Configure<Ai.AiOptions>(configuration.GetSection(Ai.AiOptions.Section));
+
+        services.AddSingleton<Application.Ai.IAiChat, Ai.AnthropicAiChat>();
 
         services.AddHybridCache();
 

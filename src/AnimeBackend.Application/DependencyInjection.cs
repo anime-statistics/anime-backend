@@ -21,6 +21,7 @@ public static class DependencyInjection
         services.AddScoped<BulkTagsHandler>();
         services.AddScoped<TagsHandler>();
         services.AddScoped<NotesHandler>();
+        services.AddScoped<Ai.AiHandlers>();
         services.AddScoped<AttachmentsHandler>();
         services.AddScoped<Materializer>();
         services.AddScoped<DomainEventDispatcher>();

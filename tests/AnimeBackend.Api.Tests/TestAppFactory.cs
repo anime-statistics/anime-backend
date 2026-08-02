@@ -1,4 +1,5 @@
 using AnimeBackend.Application.Abstractions;
+using AnimeBackend.Application.Ai;
 using AnimeBackend.Domain.Media;
 using AnimeBackend.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
@@ -20,6 +21,8 @@ public sealed class TestAppFactory : WebApplicationFactory<Program>
 
     public FakeSourceClient Aniliberty { get; } = new(MediaSource.Aniliberty);
 
+    public FakeAiChat Ai { get; } = new();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         _connection.Open();
@@ -32,6 +35,9 @@ public sealed class TestAppFactory : WebApplicationFactory<Program>
             services.RemoveAll<ISourceClient>();
             services.AddSingleton<ISourceClient>(Shikimori);
             services.AddSingleton<ISourceClient>(Aniliberty);
+
+            services.RemoveAll<IAiChat>();
+            services.AddSingleton<IAiChat>(Ai);
         });
     }
 
