@@ -4,7 +4,7 @@ public sealed class ShikimoriOptions
 {
     public const string Section = "Sources:Shikimori";
 
-    public string BaseUrl { get; set; } = "https://shikimori.one";
+    public string BaseUrl { get; set; } = "https://shikimori.io";
 
     // Shikimori rejects anonymous clients; the value identifies this app.
     public string UserAgent { get; set; } = "anime-statistics-backend";
