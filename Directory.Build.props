@@ -5,6 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- IDE0005 (unused usings) only runs with XML docs on; CS1591 noise off. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
     <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
 </Project>

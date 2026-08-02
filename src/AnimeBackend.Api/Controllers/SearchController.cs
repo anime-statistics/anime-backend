@@ -1,5 +1,4 @@
 using AnimeBackend.Application.Search;
-using AnimeBackend.Domain.Media;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AnimeBackend.Api.Controllers;

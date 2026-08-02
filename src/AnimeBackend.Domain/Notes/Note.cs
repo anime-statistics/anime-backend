@@ -1,5 +1,3 @@
-using AnimeBackend.Domain.Media;
-
 namespace AnimeBackend.Domain.Notes;
 
 // Markdown note attached to a work by its composite media id. Notes are
