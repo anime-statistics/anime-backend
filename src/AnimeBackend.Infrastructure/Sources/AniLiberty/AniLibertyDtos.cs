@@ -1,6 +1,6 @@
 namespace AnimeBackend.Infrastructure.Sources.AniLiberty;
 
-// Shapes of https://api.anilibria.app/api/v1 responses; only the fields this
+// Shapes of https://aniliberty.top/api/v1 responses; only the fields this
 // app reads. Deserialised with a snake_case naming policy.
 
 internal sealed record AlName(string? Main, string? English, string? Alternative);

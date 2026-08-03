@@ -1,5 +1,6 @@
 using AnimeBackend.Application.Abstractions;
 using AnimeBackend.Application.Ai;
+using AnimeBackend.Application.Search;
 using AnimeBackend.Domain.Media;
 using AnimeBackend.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
@@ -7,6 +8,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace AnimeBackend.Api.Tests;
 
@@ -15,6 +17,8 @@ namespace AnimeBackend.Api.Tests;
 // error shape, EF model, tag seed migration.
 public sealed class TestAppFactory : WebApplicationFactory<Program>
 {
+    public static readonly TimeSpan SourceBudget = TimeSpan.FromMilliseconds(300);
+
     private readonly SqliteConnection _connection = new("Data Source=:memory:");
 
     public FakeSourceClient Shikimori { get; } = new(MediaSource.Shikimori);
@@ -38,6 +42,14 @@ public sealed class TestAppFactory : WebApplicationFactory<Program>
 
             services.RemoveAll<IAiChat>();
             services.AddSingleton<IAiChat>(Ai);
+
+            // Same handler, a budget a test can afford to wait out.
+            services.RemoveAll<SearchHandler>();
+            services.AddScoped(sp => new SearchHandler(
+                sp.GetRequiredService<IAppDb>(),
+                sp.GetServices<ISourceClient>(),
+                sp.GetRequiredService<ILogger<SearchHandler>>(),
+                SourceBudget));
         });
     }
 

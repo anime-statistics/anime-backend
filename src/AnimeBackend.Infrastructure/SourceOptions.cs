@@ -12,15 +12,20 @@ public sealed class ShikimoriOptions
     public int SearchLimit { get; set; } = 50;
 }
 
+// The project keeps moving domains: anilibria.tv is dead, and api.anilibria.app
+// answers with headers and then stalls the body forever. aniliberty.top serves
+// the same v1 API, the posters and the pages a person opens — and is the host
+// the frontend already links to.
 public sealed class AniLibertyOptions
 {
     public const string Section = "Sources:AniLiberty";
 
-    public string BaseUrl { get; set; } = "https://api.anilibria.app";
+    public string BaseUrl { get; set; } = "https://aniliberty.top";
 
-    // Poster paths in API responses are relative to the site host, not the API
-    // host.
-    public string AssetsBaseUrl { get; set; } = "https://anilibria.top";
+    // Poster paths in API responses are relative to the site host. It happens to
+    // be the API host too right now; the split stays because it has not always
+    // been.
+    public string AssetsBaseUrl { get; set; } = "https://aniliberty.top";
 
     public int CatalogPageSize { get; set; } = 50;
 }
