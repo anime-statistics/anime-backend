@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -376,6 +377,35 @@ public class SearchDegradationTests : IClassFixture<TestAppFactory>
     {
         _factory = factory;
         _client = factory.CreateClient();
+    }
+
+    // A source that accepts the request and then never answers is the failure
+    // "is it down?" cannot see: api.anilibria.app returned 200 and stalled the
+    // body, and every search hung on it for as long as the client would wait.
+    [Fact]
+    public async Task AStuckSourceIsTreatedAsADeadOneRatherThanWaitedOut()
+    {
+        _factory.Shikimori.AddAnime(901, "Patient Title");
+        // The sibling test kills both sources and shares this fixture; xUnit
+        // does not promise an order, so state both preconditions.
+        _factory.Shikimori.IsDown = false;
+        _factory.Aniliberty.IsDown = false;
+        _factory.Aniliberty.Hangs = true;
+        try
+        {
+            var started = Stopwatch.StartNew();
+            var response = await _client.GetAsync("/api/v1/search?query=patient");
+            started.Stop();
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var body = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+            Assert.Equal(1, (int)body["total"]!);
+            Assert.True(started.Elapsed < TestAppFactory.SourceBudget * 10, $"поиск ждал {started.Elapsed}");
+        }
+        finally
+        {
+            _factory.Aniliberty.Hangs = false;
+        }
     }
 
     [Fact]

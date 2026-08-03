@@ -13,8 +13,16 @@ namespace AnimeBackend.Application.Search;
 public sealed class SearchHandler(
     IAppDb db,
     IEnumerable<ISourceClient> clients,
-    ILogger<SearchHandler> logger)
+    ILogger<SearchHandler> logger,
+    TimeSpan? sourceBudget = null)
 {
+    // One source does not get to decide how long the whole search takes. The
+    // HTTP clients carry their own ceiling; this one is here so the guarantee
+    // survives a client that misbehaves in a way its transport cannot catch.
+    private static readonly TimeSpan DefaultSourceBudget = TimeSpan.FromSeconds(12);
+
+    private readonly TimeSpan _sourceBudget = sourceBudget ?? DefaultSourceBudget;
+
     public async Task<ItemsResponse<AnimeListItemDto>> SearchAnimeAsync(
         string? query, string? sourcesCsv, CancellationToken ct)
     {
@@ -93,14 +101,19 @@ public sealed class SearchHandler(
         return requested.Count == 0 ? all : [.. all.Where(c => requested.Contains(c.Source))];
     }
 
-    // A source that is down contributes nothing instead of failing the whole
-    // search; null marks the failure so "every source is down" stays detectable.
+    // A source that is down — or merely stuck — contributes nothing instead of
+    // failing the whole search; null marks the failure so "every source is
+    // down" stays detectable. Stuck counts as down: answering late is the same
+    // as not answering, and waiting for it would strand every other source.
     private async Task<IReadOnlyList<MediaSnapshot>?> SearchOneAsync(
         ISourceClient client, string query, MediaType type, CancellationToken ct)
     {
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        budget.CancelAfter(_sourceBudget);
+
         try
         {
-            return await client.SearchAsync(query, type, ct);
+            return await client.SearchAsync(query, type, budget.Token);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

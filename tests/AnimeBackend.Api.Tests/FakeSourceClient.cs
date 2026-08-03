@@ -10,6 +10,10 @@ public sealed class FakeSourceClient(MediaSource source) : ISourceClient
 
     public bool IsDown { get; set; }
 
+    // Answers 200 and then never finishes — how api.anilibria.app failed, and
+    // the shape a plain "is it down?" check cannot see.
+    public bool Hangs { get; set; }
+
     public MediaSource Source => source;
 
     public FakeSourceClient Add(MediaSnapshot snapshot)
@@ -31,9 +35,10 @@ public sealed class FakeSourceClient(MediaSource source) : ISourceClient
         return this;
     }
 
-    public Task<IReadOnlyList<MediaSnapshot>> SearchAsync(string query, MediaType type, CancellationToken ct)
+    public async Task<IReadOnlyList<MediaSnapshot>> SearchAsync(string query, MediaType type, CancellationToken ct)
     {
         if (IsDown) throw new SourceUnavailableException(source);
+        if (Hangs) await Task.Delay(Timeout.Infinite, ct);
 
         var trimmed = query.Trim();
         IReadOnlyList<MediaSnapshot> result = [.. _catalogue
@@ -41,7 +46,7 @@ public sealed class FakeSourceClient(MediaSource source) : ISourceClient
             .Where(s => trimmed.Length == 0
                 || s.Title.Contains(trimmed, StringComparison.OrdinalIgnoreCase)
                 || s.TitleRussian?.Contains(trimmed, StringComparison.OrdinalIgnoreCase) == true)];
-        return Task.FromResult(result);
+        return result;
     }
 
     public Task<MediaSnapshot?> GetDetailAsync(MediaId id, MediaType type, CancellationToken ct)
