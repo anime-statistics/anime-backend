@@ -36,6 +36,10 @@ public sealed class MediaItem
     public List<ExternalLink> ExternalLinks { get; private set; } = [];
     public DateTimeOffset FetchedAt { get; private set; }
 
+    // Set once the user corrects the links by hand: from then on they are user
+    // state, and a fresh source snapshot leaves them alone.
+    public bool ExternalLinksEdited { get; private set; }
+
     // Lower-cased concatenation of every title, maintained on refresh. SQLite's
     // LIKE/lower() are ASCII-only, so case folding happens here in .NET where
     // Cyrillic folds correctly; library search runs Contains() on this column.
@@ -92,7 +96,7 @@ public sealed class MediaItem
         DurationMinutes = snapshot.DurationMinutes;
         Authors = [.. snapshot.Authors ?? []];
         Related = [.. snapshot.Related ?? []];
-        ExternalLinks = [.. snapshot.ExternalLinks ?? []];
+        if (!ExternalLinksEdited) ExternalLinks = [.. snapshot.ExternalLinks ?? []];
         SecondarySource ??= snapshot.SecondarySource;
         SearchText = string.Join('\n',
             new[] { Title, TitleRussian, TitleJapanese, TitleEnglish }
@@ -116,6 +120,16 @@ public sealed class MediaItem
         if (watchedEpisodes is not null) WatchedEpisodes = watchedEpisodes.Value;
         if (volumesRead is not null) VolumesRead = volumesRead.Value;
         if (chaptersRead is not null) ChaptersRead = chaptersRead.Value;
+        Touch();
+    }
+
+    // Full replacement: the list the user sends is the list stored, an empty
+    // one leaves the work with no links at all. Marks the links as hand-edited,
+    // so `RefreshSnapshot` stops overwriting them from the source.
+    public void ReplaceExternalLinks(IReadOnlyList<ExternalLink> links)
+    {
+        ExternalLinks = [.. links.Select(link => link.Normalized())];
+        ExternalLinksEdited = true;
         Touch();
     }
 

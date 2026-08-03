@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
+using AnimeBackend.Domain.Media;
 
 namespace AnimeBackend.Api.Tests;
 
@@ -204,6 +205,141 @@ public class ApiTests : IClassFixture<TestAppFactory>
         Assert.Equal(2, (int)page2["page"]!);
         Assert.Equal(2, (int)page2["size"]!);
         Assert.Equal(2, page2["items"]!.AsArray().Count);
+    }
+}
+
+public class ExternalLinksApiTests : IClassFixture<TestAppFactory>
+{
+    private readonly TestAppFactory _factory;
+    private readonly HttpClient _client;
+
+    public ExternalLinksApiTests(TestAppFactory factory)
+    {
+        _factory = factory;
+        _client = factory.CreateClient();
+    }
+
+    private static StringContent Json(string raw) => new(raw, Encoding.UTF8, "application/json");
+
+    private static async Task<JsonNode> ReadAsync(HttpResponseMessage response)
+        => JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+
+    private Task<HttpResponseMessage> SaveLinksAsync(string mediaId, string links)
+        => _client.PatchAsync($"/api/v1/anime/{mediaId}/links", Json($"{{\"external_links\":[{links}]}}"));
+
+    // The reported bug: a title matched badly by the importer is not in the
+    // collection, so saving its links has to materialise it first.
+    [Fact]
+    public async Task SavingLinksMaterialisesAWorkOutsideTheCollection()
+    {
+        _factory.Shikimori.AddAnime(801, "Links Case");
+        const string mediaId = "shikimori_801-links-case";
+
+        var saved = await SaveLinksAsync(mediaId,
+            "{\"source\":\"shikimori\",\"url\":\"https://shikimori.io/animes/801\"}");
+        Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+
+        var link = (await ReadAsync(saved))["external_links"]!.AsArray().Single()!;
+        Assert.Equal("shikimori", (string)link["source"]!);
+        Assert.Equal("https://shikimori.io/animes/801", (string)link["url"]!);
+
+        // ...and it is still there on the next read, not just in the response.
+        var reread = await ReadAsync(await _client.GetAsync($"/api/v1/anime/{mediaId}"));
+        Assert.Equal("https://shikimori.io/animes/801",
+            (string)reread["external_links"]!.AsArray().Single()!["url"]!);
+    }
+
+    [Fact]
+    public async Task ApiUrlSurvivesTheRoundTripAndIsDerivedWhenAbsent()
+    {
+        _factory.Shikimori.AddAnime(802, "Api Url Case");
+        const string mediaId = "shikimori_802-api-url-case";
+
+        var body = await ReadAsync(await SaveLinksAsync(mediaId,
+            "{\"source\":\"aniliberty\",\"url\":\"https://anilibria.top/anime/releases/release/frieren/episodes\","
+            + "\"api_url\":\"https://api.anilibria.app/api/v1/anime/releases/9000\"},"
+            + "{\"source\":\"shikimori\",\"url\":\"https://shikimori.io/animes/802\"}"));
+
+        var links = body["external_links"]!.AsArray();
+        Assert.Equal("https://api.anilibria.app/api/v1/anime/releases/9000", (string)links[0]!["api_url"]!);
+        Assert.Equal("https://shikimori.io/api/animes/802", (string)links[1]!["api_url"]!);
+
+        // Read back through the JSON column, not just the entity still in memory.
+        var stored = (await ReadAsync(await _client.GetAsync($"/api/v1/anime/{mediaId}")))["external_links"]!.AsArray();
+        Assert.Equal("https://api.anilibria.app/api/v1/anime/releases/9000", (string)stored[0]!["api_url"]!);
+        Assert.Equal("https://shikimori.io/api/animes/802", (string)stored[1]!["api_url"]!);
+    }
+
+    [Fact]
+    public async Task SavingReplacesTheWholeList()
+    {
+        _factory.Shikimori.AddAnime(803, "Replace Case");
+        const string mediaId = "shikimori_803-replace-case";
+
+        await SaveLinksAsync(mediaId,
+            "{\"source\":\"shikimori\",\"url\":\"https://shikimori.io/animes/803\"},"
+            + "{\"source\":\"myanimelist\",\"url\":\"https://myanimelist.net/anime/803\"}");
+
+        var replaced = await ReadAsync(await SaveLinksAsync(mediaId,
+            "{\"source\":\"aniliberty\",\"url\":\"https://anilibria.top/anime/803\"}"));
+
+        var single = replaced["external_links"]!.AsArray().Single()!;
+        Assert.Equal("aniliberty", (string)single["source"]!);
+
+        // An empty list is a legitimate answer too: the work keeps no links.
+        var cleared = await ReadAsync(await SaveLinksAsync(mediaId, ""));
+        Assert.Null(cleared["external_links"]);
+    }
+
+    [Fact]
+    public async Task BadLinksAreRejectedWithAMessage()
+    {
+        _factory.Shikimori.AddAnime(804, "Bad Link Case");
+        const string mediaId = "shikimori_804-bad-link-case";
+
+        var junkUrl = await SaveLinksAsync(mediaId, "{\"source\":\"shikimori\",\"url\":\"не адрес\"}");
+        Assert.Equal(HttpStatusCode.BadRequest, junkUrl.StatusCode);
+        Assert.NotNull((await ReadAsync(junkUrl))["message"]);
+
+        var relativeUrl = await SaveLinksAsync(mediaId, "{\"source\":\"shikimori\",\"url\":\"/animes/804\"}");
+        Assert.Equal(HttpStatusCode.BadRequest, relativeUrl.StatusCode);
+
+        var noSource = await SaveLinksAsync(mediaId, "{\"source\":\"\",\"url\":\"https://shikimori.io/animes/804\"}");
+        Assert.Equal(HttpStatusCode.BadRequest, noSource.StatusCode);
+
+        // Nothing of the rejected requests stuck.
+        var detail = await ReadAsync(await _client.GetAsync($"/api/v1/anime/{mediaId}"));
+        Assert.Null(detail["external_links"]);
+    }
+
+    [Fact]
+    public async Task UnknownWorkIs404()
+    {
+        var response = await SaveLinksAsync("shikimori_999801-nope",
+            "{\"source\":\"shikimori\",\"url\":\"https://shikimori.io/animes/999801\"}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.NotNull((await ReadAsync(response))["message"]);
+    }
+
+    [Fact]
+    public async Task MangaLinksSaveThroughTheirOwnRoute()
+    {
+        _factory.Shikimori.Add(new MediaSnapshot
+        {
+            Id = MediaId.Build(MediaSource.Shikimori, 805, "Manga Links Case"),
+            Type = MediaType.Manga,
+            Title = "Manga Links Case",
+            ChaptersTotal = 100,
+        });
+
+        var saved = await _client.PatchAsync(
+            "/api/v1/manga/shikimori_805-manga-links-case/links",
+            Json("{\"external_links\":[{\"source\":\"shikimori\",\"url\":\"https://shikimori.io/mangas/805\"}]}"));
+
+        Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+        var link = (await ReadAsync(saved))["external_links"]!.AsArray().Single()!;
+        Assert.Equal("https://shikimori.io/api/mangas/805", (string)link["api_url"]!);
     }
 }
 

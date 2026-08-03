@@ -10,7 +10,7 @@ using Microsoft.Extensions.Options;
 
 namespace AnimeBackend.Infrastructure.Sources.Shikimori;
 
-// REST client for shikimori.one. The site enforces a User-Agent and rate
+// REST client for shikimori.io. The site enforces a User-Agent and rate
 // limits (5 rps / 90 rpm); responses are cached so repeated searches do not
 // burn the budget. Search understands Russian queries natively.
 public sealed partial class ShikimoriClient(
@@ -147,10 +147,26 @@ public sealed partial class ShikimoriClient(
             .Select(r => r!)
             .ToList();
 
-        var externalLinks = (links ?? [])
-            .Where(l => !string.IsNullOrEmpty(l.Url))
-            .Select(l => new ExternalLink(l.Kind ?? "shikimori", l.Url!))
-            .ToList();
+        // `/external_links` lists everyone BUT Shikimori — MAL, AniDB, the
+        // official site. Shikimori's own address is the one the user reaches
+        // for most, so it leads the list; the rest keep their `kind` as source.
+        var baseUrl = options.Value.BaseUrl.TrimEnd('/');
+        var resource = type == MediaType.Manga ? "mangas" : "animes";
+        var externalLinks = new List<ExternalLink>
+        {
+            new("shikimori",
+                $"{baseUrl}/{resource}/{detail.Id}",
+                $"{baseUrl}/api/{resource}/{detail.Id}"),
+        };
+
+        externalLinks.AddRange((links ?? [])
+            .Where(l => !string.IsNullOrEmpty(l.Url) && l.Kind != "shikimori")
+            // The /api twin rule holds for Shikimori's own host only; inventing
+            // one for myanimelist.net would just be a broken address.
+            .Select(l => new ExternalLink(
+                l.Kind ?? "shikimori",
+                l.Url!,
+                SameHost(l.Url!, baseUrl) ? ExternalLink.DeriveApiUrl(l.Url) : null)));
 
         return MapListItem(
             new ShikiListItem(detail.Id, detail.Name, detail.Russian, detail.Image, detail.Score,
@@ -167,9 +183,14 @@ public sealed partial class ShikimoriClient(
                 ? [.. detail.Genres.Select(g => g.Russian ?? g.Name ?? "").Where(g => g.Length > 0)]
                 : null,
             Related = relatedWorks.Count > 0 ? relatedWorks : null,
-            ExternalLinks = externalLinks.Count > 0 ? externalLinks : null,
+            ExternalLinks = externalLinks,
         };
     }
+
+    private static bool SameHost(string url, string baseUrl)
+        => Uri.TryCreate(url, UriKind.Absolute, out var parsed)
+            && Uri.TryCreate(baseUrl, UriKind.Absolute, out var origin)
+            && string.Equals(parsed.Host, origin.Host, StringComparison.OrdinalIgnoreCase);
 
     // Shikimori sends 0 episodes for ongoing titles in some kinds; falling back
     // to the aired count keeps progress bars meaningful, zero stays "announced".

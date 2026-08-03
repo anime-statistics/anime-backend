@@ -12,9 +12,13 @@ public sealed record RelatedWorkDto(string Id, string Title, string Relation)
     public static RelatedWorkDto From(RelatedWork related) => new(related.Id, related.Title, related.Relation);
 }
 
-public sealed record ExternalLinkDto(string Source, string Url)
+// `api_url` is optional on the wire: absent means "not known", and the client
+// derives one of its own.
+public sealed record ExternalLinkDto(string Source, string Url, string? ApiUrl = null)
 {
-    public static ExternalLinkDto From(ExternalLink link) => new(link.Source, link.Url);
+    public static ExternalLinkDto From(ExternalLink link) => new(link.Source, link.Url, link.ApiUrl);
+
+    public ExternalLink ToDomain() => new(Source, Url, ApiUrl);
 }
 
 public sealed record AnimeListItemDto

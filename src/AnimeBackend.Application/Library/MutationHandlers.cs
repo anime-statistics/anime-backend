@@ -71,6 +71,32 @@ public sealed class ReplaceTagsHandler(IAppDb db, Materializer materializer)
     }
 }
 
+public sealed record ExternalLinksUpdateRequest(IReadOnlyList<ExternalLinkDto>? ExternalLinks);
+
+// Full replacement of the addresses a work is reachable at. The work is
+// materialised first: the links most in need of a correction belong to a title
+// the importer matched badly, which may not be in the collection yet — and
+// then there is no row to write to.
+public sealed class ReplaceLinksHandler(IAppDb db, Materializer materializer)
+{
+    public async Task<AnimeDetailDto> AnimeAsync(
+        string rawId, IReadOnlyList<ExternalLinkDto> links, CancellationToken ct)
+        => AnimeDetailDto.From(await ApplyAsync(rawId, MediaType.Anime, links, ct));
+
+    public async Task<MangaDetailDto> MangaAsync(
+        string rawId, IReadOnlyList<ExternalLinkDto> links, CancellationToken ct)
+        => MangaDetailDto.From(await ApplyAsync(rawId, MediaType.Manga, links, ct));
+
+    private async Task<MediaItem> ApplyAsync(
+        string rawId, MediaType type, IReadOnlyList<ExternalLinkDto> links, CancellationToken ct)
+    {
+        var item = await materializer.GetOrLoadAsync(rawId, type, ct);
+        item.ReplaceExternalLinks([.. links.Select(link => link.ToDomain())]);
+        await db.SaveChangesAsync(ct);
+        return item;
+    }
+}
+
 public sealed record BulkTagsRequest(
     IReadOnlyList<string> Ids,
     IReadOnlyList<string>? Add,

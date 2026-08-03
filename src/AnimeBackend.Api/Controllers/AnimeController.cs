@@ -13,6 +13,7 @@ public sealed class AnimeController(
     GetDetailHandler detail,
     UpdateProgressHandler progress,
     ReplaceTagsHandler replaceTags,
+    ReplaceLinksHandler replaceLinks,
     BulkTagsHandler bulkTags) : ControllerBase
 {
     // Library view: ONLY works with at least one tag. The catalogue lives in
@@ -43,6 +44,14 @@ public sealed class AnimeController(
     public async Task<AnimeDetailDto> ReplaceTags(
         string id, [FromBody] TagsUpdateRequest request, CancellationToken ct)
         => await replaceTags.AnimeAsync(id, request.MyTags ?? [], ct);
+
+    // Full replacement; an empty list leaves the work with no links. Editing
+    // materialises the work, so a title matched badly by the importer can be
+    // corrected before it ever joins the collection.
+    [HttpPatch("{id}/links")]
+    public async Task<AnimeDetailDto> ReplaceLinks(
+        string id, [FromBody] ExternalLinksUpdateRequest request, CancellationToken ct)
+        => await replaceLinks.AnimeAsync(id, request.ExternalLinks ?? [], ct);
 
     [HttpPost("tags/bulk")]
     public async Task<BulkUpdateResponse> BulkTags(
