@@ -210,6 +210,8 @@ public class ApiTests : IClassFixture<TestAppFactory>
 
 public class ExternalLinksApiTests : IClassFixture<TestAppFactory>
 {
+    private const string WatchingTag = "0f1a2b3c-4d5e-4f60-8a91-b2c3d4e5f701";
+
     private readonly TestAppFactory _factory;
     private readonly HttpClient _client;
 
@@ -320,6 +322,28 @@ public class ExternalLinksApiTests : IClassFixture<TestAppFactory>
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.NotNull((await ReadAsync(response))["message"]);
+    }
+
+    // The badge on the card and in the detail header reads the source pair, not
+    // the links — so pointing a work at the other catalogue has to reach it.
+    [Fact]
+    public async Task ALinkToTheOtherCatalogueShowsUpAsTheSecondarySource()
+    {
+        _factory.Aniliberty.AddAnime(806, "Crossing Case");
+        const string mediaId = "aniliberty_806-crossing-case";
+        await _client.PatchAsync($"/api/v1/anime/{mediaId}/tags", Json($"{{\"my_tags\":[\"{WatchingTag}\"]}}"));
+
+        var saved = await ReadAsync(await SaveLinksAsync(mediaId,
+            "{\"source\":\"aniliberty\",\"url\":\"https://anilibria.top/anime/806\"},"
+            + "{\"source\":\"shikimori\",\"url\":\"https://shikimori.io/animes/52991\"}"));
+
+        Assert.Equal("aniliberty", (string)saved["source"]!);
+        Assert.Equal("shikimori", (string)saved["secondary_source"]!);
+
+        // ...including on the library list, which is where the user missed it.
+        var card = (await ReadAsync(await _client.GetAsync("/api/v1/anime?query=crossing")))["items"]!
+            .AsArray().Single()!;
+        Assert.Equal("shikimori", (string)card["secondary_source"]!);
     }
 
     [Fact]

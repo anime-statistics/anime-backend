@@ -58,6 +58,16 @@ public sealed class MediaItem
     // The score shown to the user: their own mark wins over the catalogue's.
     public double? EffectiveScore => UserScore ?? SourceScore;
 
+    // The other catalogue this work is known at, as the source badges show it.
+    // A search merge records one; so does a link the user adds by hand, which
+    // is the same statement made a different way — and the only way to say it
+    // for a title the merge never matched. Derived rather than stored, so the
+    // badge is right for rows written before links became editable.
+    public MediaSource? EffectiveSecondarySource
+        => SecondarySource ?? ExternalLinks
+            .Select(link => MediaSourceExtensions.FromWire(link.Source?.ToLowerInvariant()))
+            .FirstOrDefault(linked => linked is not null && linked != Source);
+
     private MediaItem() { }
 
     public static MediaItem FromSnapshot(MediaSnapshot snapshot)

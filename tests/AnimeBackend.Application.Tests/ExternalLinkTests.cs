@@ -112,6 +112,53 @@ public class ExternalLinkTests
         Assert.Equal("shikimori", item.ExternalLinks.Single().Source);
     }
 
+    // A title the merge never matched can only be told "it is on Shikimori too"
+    // through its links, and the source badges have to say so.
+    [Fact]
+    public void ALinkToTheOtherCatalogueBecomesTheSecondarySource()
+    {
+        var item = MediaItem.FromSnapshot(new MediaSnapshot
+        {
+            Id = MediaId.Build(MediaSource.Aniliberty, 9542, "Sousou no Frieren"),
+            Type = MediaType.Anime,
+            Title = "Sousou no Frieren",
+        });
+        Assert.Null(item.EffectiveSecondarySource);
+
+        item.ReplaceExternalLinks([
+            new ExternalLink("aniliberty", "https://anilibria.top/anime/releases/release/frieren/episodes"),
+            new ExternalLink("Shikimori", "https://shikimori.io/animes/52991"),
+        ]);
+
+        Assert.Equal(MediaSource.Shikimori, item.EffectiveSecondarySource);
+    }
+
+    [Fact]
+    public void LinksToTheOwnSourceOrToThirdPartiesInventNothing()
+    {
+        var item = MediaItem.FromSnapshot(Snapshot());
+
+        item.ReplaceExternalLinks([
+            new ExternalLink("shikimori", "https://shikimori.io/animes/52991"),
+            new ExternalLink("myanimelist", "https://myanimelist.net/anime/52991"),
+            new ExternalLink("wikipedia", "https://en.wikipedia.org/wiki/Frieren"),
+        ]);
+
+        Assert.Null(item.EffectiveSecondarySource);
+    }
+
+    // A merge records the second source without necessarily contributing a link
+    // for it, so editing the links must not be able to erase that.
+    [Fact]
+    public void AMergedSecondarySourceOutlivesTheLinks()
+    {
+        var item = MediaItem.FromSnapshot(Snapshot() with { SecondarySource = MediaSource.Aniliberty });
+
+        item.ReplaceExternalLinks([new ExternalLink("shikimori", "https://shikimori.io/animes/52991")]);
+
+        Assert.Equal(MediaSource.Aniliberty, item.EffectiveSecondarySource);
+    }
+
     // The whole point of the flag: refreshing the catalogue snapshot must not
     // undo a correction the user made by hand.
     [Fact]
