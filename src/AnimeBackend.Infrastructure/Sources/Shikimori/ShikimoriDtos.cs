@@ -1,6 +1,6 @@
 namespace AnimeBackend.Infrastructure.Sources.Shikimori;
 
-// Shapes of https://shikimori.one/api REST responses; only the fields this app
+// Shapes of https://shikimori.io/api REST responses; only the fields this app
 // reads. Deserialised with a snake_case naming policy.
 
 internal sealed record ShikiImage(string? Original, string? Preview);
