@@ -85,12 +85,21 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
             .HaveConversion<Microsoft.EntityFrameworkCore.Storage.ValueConversion.DateTimeOffsetToBinaryConverter>();
     }
 
+    // Storage has its own casing contract, deliberately NOT the wire's
+    // snake_case: rows already on disk carry PascalCase keys, and the two
+    // contracts must be free to move apart. Pinned to an explicit instance so
+    // changing one never silently changes the other.
+    private static readonly JsonSerializerOptions StoredJson = new()
+    {
+        PropertyNamingPolicy = null,
+    };
+
     private static void ConfigureJsonColumn<T>(
         Microsoft.EntityFrameworkCore.Metadata.Builders.PropertyBuilder<List<T>> property)
     {
         var converter = new ValueConverter<List<T>, string>(
-            value => JsonSerializer.Serialize(value, JsonSerializerOptions.Default),
-            stored => JsonSerializer.Deserialize<List<T>>(stored, JsonSerializerOptions.Default) ?? new List<T>());
+            value => JsonSerializer.Serialize(value, StoredJson),
+            stored => JsonSerializer.Deserialize<List<T>>(stored, StoredJson) ?? new List<T>());
 
         var comparer = new ValueComparer<List<T>>(
             (left, right) => (left ?? new List<T>()).SequenceEqual(right ?? new List<T>()),

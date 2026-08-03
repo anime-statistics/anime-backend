@@ -11,6 +11,7 @@ public sealed class MangaController(
     GetDetailHandler detail,
     UpdateProgressHandler progress,
     ReplaceTagsHandler replaceTags,
+    ReplaceLinksHandler replaceLinks,
     BulkTagsHandler bulkTags) : ControllerBase
 {
     [HttpGet]
@@ -35,6 +36,11 @@ public sealed class MangaController(
     public async Task<MangaDetailDto> ReplaceTags(
         string id, [FromBody] TagsUpdateRequest request, CancellationToken ct)
         => await replaceTags.MangaAsync(id, request.MyTags ?? [], ct);
+
+    [HttpPatch("{id}/links")]
+    public async Task<MangaDetailDto> ReplaceLinks(
+        string id, [FromBody] ExternalLinksUpdateRequest request, CancellationToken ct)
+        => await replaceLinks.MangaAsync(id, request.ExternalLinks ?? [], ct);
 
     [HttpPost("tags/bulk")]
     public async Task<BulkUpdateResponse> BulkTags(

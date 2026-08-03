@@ -18,6 +18,7 @@ public static class DependencyInjection
         services.AddScoped<GetDetailHandler>();
         services.AddScoped<UpdateProgressHandler>();
         services.AddScoped<ReplaceTagsHandler>();
+        services.AddScoped<ReplaceLinksHandler>();
         services.AddScoped<BulkTagsHandler>();
         services.AddScoped<TagsHandler>();
         services.AddScoped<NotesHandler>();

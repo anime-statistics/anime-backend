@@ -120,12 +120,15 @@ public sealed class AniLibertyClient(
         // `name.main` is the Russian localisation.
         var title = release.Name?.English ?? release.Name?.Main ?? $"release-{release.Id}";
 
+        // Page and API live on different hosts here, so the API twin is not the
+        // page URL under /api — it is the very address this client fetches.
         var links = new List<ExternalLink>();
         if (!string.IsNullOrEmpty(release.Alias))
         {
             links.Add(new ExternalLink(
                 "aniliberty",
-                $"{options.Value.AssetsBaseUrl.TrimEnd('/')}/anime/releases/release/{release.Alias}/episodes"));
+                $"{options.Value.AssetsBaseUrl.TrimEnd('/')}/anime/releases/release/{release.Alias}/episodes",
+                $"{options.Value.BaseUrl.TrimEnd('/')}/api/v1/anime/releases/{release.Id}"));
         }
 
         return new MediaSnapshot
