@@ -55,7 +55,7 @@ public sealed record AnimeListItemDto
         AiredTo = item.AiredTo,
         MyTags = TagIds(item),
         Source = item.Source.ToWire(),
-        SecondarySource = item.SecondarySource?.ToWire(),
+        SecondarySource = item.EffectiveSecondarySource?.ToWire(),
     };
 
     public static AnimeListItemDto From(MediaSnapshot snapshot, IReadOnlyList<string> myTags) => new()
@@ -120,7 +120,7 @@ public sealed record AnimeDetailDto
         AiredTo = item.AiredTo,
         MyTags = AnimeListItemDto.TagIds(item),
         Source = item.Source.ToWire(),
-        SecondarySource = item.SecondarySource?.ToWire(),
+        SecondarySource = item.EffectiveSecondarySource?.ToWire(),
         Rating = item.Rating,
         Duration = item.DurationMinutes,
         WatchedEpisodes = item.WatchedEpisodes,
@@ -193,7 +193,7 @@ public sealed record MangaListItemDto
         PublishedTo = item.PublishedTo,
         MyTags = AnimeListItemDto.TagIds(item),
         Source = item.Source.ToWire(),
-        SecondarySource = item.SecondarySource?.ToWire(),
+        SecondarySource = item.EffectiveSecondarySource?.ToWire(),
     };
 
     public static MangaListItemDto From(MediaSnapshot snapshot, IReadOnlyList<string> myTags) => new()
@@ -258,7 +258,7 @@ public sealed record MangaDetailDto
         PublishedTo = item.PublishedTo,
         MyTags = AnimeListItemDto.TagIds(item),
         Source = item.Source.ToWire(),
-        SecondarySource = item.SecondarySource?.ToWire(),
+        SecondarySource = item.EffectiveSecondarySource?.ToWire(),
         Authors = item.Authors.Count > 0 ? item.Authors : null,
         VolumesRead = item.VolumesRead,
         ChaptersRead = item.ChaptersRead,
